@@ -17,6 +17,8 @@ FastAPI API that powers [Vision AI Extractor](https://github.com/vidaHd/vision-a
 sequenceDiagram
   participant UI as Frontend
   participant API as FastAPI
+  participant Redis as Redis
+  participant Worker as Celery worker
   participant OCR as PaddleOCR
   participant LLM as Ollama
   participant DB as PostgreSQL
@@ -24,12 +26,21 @@ sequenceDiagram
   UI->>API: POST /auth/login (JWT)
   UI->>API: POST /upload (menu image)
   API-->>UI: image URL
-  UI->>API: POST /ocr/extract
-  API->>OCR: read image text
-  OCR-->>API: raw text
-  UI->>API: POST /menu/extract
-  API->>LLM: structure dishes / prices
-  LLM-->>API: JSON menu
+  UI->>API: POST /jobs/extract
+  API->>Redis: enqueue Celery task
+  API-->>UI: job_id
+  loop Poll until done
+    UI->>API: GET /jobs/{id}
+    API->>Redis: AsyncResult
+    API-->>UI: status / progress
+  end
+  Worker->>Redis: claim job
+  Worker->>OCR: read image text
+  OCR-->>Worker: raw text
+  Worker->>LLM: structure dishes / prices
+  LLM-->>Worker: JSON menu
+  Worker->>Redis: store result
+  UI->>API: GET /jobs/{id} (succeeded)
   API-->>UI: digital menu
   UI->>API: POST /restaurants (save + location)
   API->>DB: store for owner
@@ -37,9 +48,10 @@ sequenceDiagram
 
 1. **Auth** — register / login, JWT on protected routes.  
 2. **Upload** — store the menu image under `/uploads`.  
-3. **OCR** — PaddleOCR reads text from the image.  
-4. **Menu extract** — Ollama (OpenAI-compatible `/v1`) turns text into structured sections & dishes.  
-5. **Restaurants** — owner-scoped CRUD with optional map coordinates.
+3. **Jobs** — `POST /jobs/extract` queues OCR + LLM on Celery/Redis; poll `GET /jobs/{id}`.  
+4. **Worker** — PaddleOCR then Ollama (OpenAI-compatible `/v1`).  
+5. **Restaurants** — owner-scoped CRUD with optional map coordinates.  
+Sync `POST /ocr` and `POST /menu/extract` still exist for debugging.
 
 ---
 
@@ -48,6 +60,7 @@ sequenceDiagram
 | Piece | Role |
 |-------|------|
 | FastAPI | HTTP API |
+| Celery + Redis | Async OCR/LLM jobs |
 | SQLAlchemy + Alembic | ORM & migrations |
 | PostgreSQL 16 | Persistence |
 | PaddleOCR | Text from images |
@@ -65,8 +78,9 @@ Interactive docs when the server is up: **http://localhost:8000/docs**
 | Health | `GET /health` |
 | Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me` |
 | Upload | `POST /upload` |
-| OCR | `POST /ocr/extract` |
-| Menu | `POST /menu/extract` |
+| Jobs | `POST /jobs/extract`, `GET /jobs/{id}` |
+| OCR | `POST /ocr` (sync, debug) |
+| Menu | `POST /menu/extract` (sync, debug) |
 | Restaurants | `GET/POST /restaurants`, `GET/PATCH/DELETE /restaurants/{id}` |
 | Files | Static `/uploads/...` |
 
@@ -105,6 +119,7 @@ uvicorn app.main:app --reload --port 8000
 | Variable | Purpose |
 |----------|---------|
 | `DATABASE_URL` | SQLAlchemy URL |
+| `REDIS_URL` / `CELERY_*` | Celery broker + result backend |
 | `SECRET_KEY` | JWT signing key |
 | `LLM_BASE_URL` | Default `http://ollama:11434/v1` in Compose |
 | `LLM_MODEL` | e.g. `qwen2.5:3b` |
@@ -118,6 +133,12 @@ Never commit a real `.env`.
 docker build -t vidahedayati/vision-ai-backend .
 ```
 
+Worker (same image):
+
+```bash
+celery -A app.workers.celery_app.celery_app worker --loglevel=info --concurrency=1
+```
+
 ---
 
 ## Project structure
@@ -126,12 +147,13 @@ docker build -t vidahedayati/vision-ai-backend .
 backend/
 ├── alembic/           # Migrations
 ├── app/
-│   ├── api/routes/    # auth, upload, ocr, menu, restaurants
+│   ├── api/routes/    # auth, upload, jobs, ocr, menu, restaurants
 │   ├── core/          # config, security
 │   ├── db/
 │   ├── models/
 │   ├── schemas/
-│   └── services/      # OCR, LLM, restaurants, users
+│   ├── services/      # OCR, LLM, restaurants, users
+│   └── workers/       # Celery app + extract task
 ├── Dockerfile
 └── requirements.txt
 ```
