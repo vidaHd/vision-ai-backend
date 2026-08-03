@@ -53,3 +53,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60") or "60"
 )
 
+# Celery / Redis (broker + result backend)
+REDIS_URL = (
+    os.getenv("REDIS_URL", "").strip() or "redis://localhost:6379/0"
+)
+CELERY_BROKER_URL = (
+    os.getenv("CELERY_BROKER_URL", "").strip() or REDIS_URL
+)
+CELERY_RESULT_BACKEND = (
+    os.getenv("CELERY_RESULT_BACKEND", "").strip() or REDIS_URL
+)
+
