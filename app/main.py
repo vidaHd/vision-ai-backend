@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.health import router as health_router
+from app.api.routes.jobs import router as jobs_router
 from app.api.routes.menu import router as menu_router
 from app.api.routes.ocr import router as ocr_router
 from app.api.routes.restaurants import router as restaurants_router
@@ -35,6 +36,7 @@ app.include_router(auth_router)
 app.include_router(upload_router)
 app.include_router(ocr_router)
 app.include_router(menu_router)
+app.include_router(jobs_router)
 app.include_router(restaurants_router)
 
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
