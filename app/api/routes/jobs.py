@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from celery.result import AsyncResult
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
+from app.core.config import RATE_LIMIT_EXTRACT, RATE_LIMIT_WINDOW_SECONDS
 from app.schemas.jobs import (
     ExtractJobCreated,
     ExtractJobRequest,
@@ -11,6 +12,7 @@ from app.schemas.jobs import (
 )
 from app.schemas.menu import MenuExtractResponse
 from app.services.ocr.service import resolve_upload_path
+from app.services.rate_limit import client_ip, enforce_rate_limit
 from app.workers.celery_app import celery_app
 from app.workers.tasks import extract_menu_pipeline
 
@@ -47,8 +49,17 @@ def _error_message(result: AsyncResult) -> str:
 
 
 @router.post("/jobs/extract", response_model=ExtractJobCreated)
-def enqueue_extract_job(body: ExtractJobRequest) -> ExtractJobCreated:
+def enqueue_extract_job(
+    body: ExtractJobRequest,
+    request: Request,
+) -> ExtractJobCreated:
     """Enqueue OCR + menu extraction; returns immediately with a job id."""
+    enforce_rate_limit(
+        scope="extract",
+        identity=client_ip(request),
+        limit=RATE_LIMIT_EXTRACT,
+        window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+    )
     try:
         resolve_upload_path(body.filename)
     except FileNotFoundError as exc:

@@ -1,15 +1,30 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from app.core.config import UPLOAD_DIR
+from app.core.config import (
+    RATE_LIMIT_UPLOAD,
+    RATE_LIMIT_WINDOW_SECONDS,
+    UPLOAD_DIR,
+)
+from app.services.rate_limit import client_ip, enforce_rate_limit
 
 router = APIRouter(tags=["upload"])
 
 
 @router.post("/upload")
-async def upload_image(file: UploadFile = File(...)) -> dict[str, str | int]:
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+) -> dict[str, str | int]:
+    enforce_rate_limit(
+        scope="upload",
+        identity=client_ip(request),
+        limit=RATE_LIMIT_UPLOAD,
+        window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+    )
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Uploaded file must be an image")
 

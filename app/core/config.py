@@ -53,7 +53,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60") or "60"
 )
 
-# Celery / Redis (broker + result backend)
+# Celery / Redis (broker + result backend + Phase 3 cache / rate-limit)
 REDIS_URL = (
     os.getenv("REDIS_URL", "").strip() or "redis://localhost:6379/0"
 )
@@ -63,4 +63,14 @@ CELERY_BROKER_URL = (
 CELERY_RESULT_BACKEND = (
     os.getenv("CELERY_RESULT_BACKEND", "").strip() or REDIS_URL
 )
+
+# Cache (restaurant list / detail). Keys use prefix `vae:cache:`.
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "60") or "60")
+
+# Rate limits (fixed window). Keys use prefix `vae:rl:`.
+RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60") or "60"
+)
+RATE_LIMIT_UPLOAD = int(os.getenv("RATE_LIMIT_UPLOAD", "20") or "20")
+RATE_LIMIT_EXTRACT = int(os.getenv("RATE_LIMIT_EXTRACT", "10") or "10")
 
