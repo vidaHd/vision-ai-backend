@@ -11,6 +11,7 @@ from app.schemas.jobs import (
     JobStatus,
 )
 from app.schemas.menu import MenuExtractResponse
+from app.services.job_idempotency import get_existing_extract_job, remember_extract_job
 from app.services.ocr.service import resolve_upload_path
 from app.services.rate_limit import client_ip, enforce_rate_limit
 from app.workers.celery_app import celery_app
@@ -67,7 +68,12 @@ def enqueue_extract_job(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    existing_job_id = get_existing_extract_job(body.filename)
+    if existing_job_id:
+        return ExtractJobCreated(job_id=existing_job_id, status="queued")
+
     task = extract_menu_pipeline.delay(body.filename)
+    remember_extract_job(body.filename, task.id)
     return ExtractJobCreated(job_id=task.id, status="queued")
 
 

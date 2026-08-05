@@ -74,3 +74,9 @@ RATE_LIMIT_WINDOW_SECONDS = int(
 RATE_LIMIT_UPLOAD = int(os.getenv("RATE_LIMIT_UPLOAD", "20") or "20")
 RATE_LIMIT_EXTRACT = int(os.getenv("RATE_LIMIT_EXTRACT", "10") or "10")
 
+# Phase 4 — job retries + idempotency (keys use prefix `vae:job:extract:`).
+TASK_MAX_RETRIES = int(os.getenv("TASK_MAX_RETRIES", "2") or "2")
+JOB_IDEMPOTENCY_TTL_SECONDS = int(
+    os.getenv("JOB_IDEMPOTENCY_TTL_SECONDS", "3600") or "3600"
+)
+
